@@ -6,6 +6,7 @@
 http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
 http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
 http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+
 <!-- ============ POST /api/accounts : create ============ -->                      
 	<flow name="create-account-flow" doc:id="25295d41-1a1d-4486-ae9b-8a54204404ae" >
 		<http:listener doc:name="POST /accounts" doc:id="a4fcf680-d82a-4ac5-8bf7-6766e71edc5c" config-ref="HTTP_Listener_config" path="/accounts" allowedMethods="POST">
@@ -25,14 +26,14 @@ http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mu
 				<ee:set-payload ><![CDATA[%dw 2.0
 output application/java
 ---
-{
+[{
 	Name: payload.companyName,
 	Phone: payload.phone,
 	Website: payload.website,
 	BillingCity: payload.city,
 	Industry: payload.industry,
 	Customer_Id__c: payload.customerId
-} filterObject ((value) -> value != null)]]></ee:set-payload>
+} filterObject ((value) -> value != null)]]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
 		<salesforce:create type="Account" doc:name="Create Account" doc:id="536852c6-e853-4781-b704-f6631d7d8b33" config-ref="Salesforce_Config"/>
@@ -56,6 +57,46 @@ output application/json
 		</ee:transform>
 		<error-handler ref="accounts-error-handler" />
 	</flow>
+	
+<!-- ============ GET /api/accounts?name= : query ============ -->
+	<flow name="find-accounts-flow" doc:id="d61c9b02-9df3-4d8b-b864-d29f2e4977d1" >
+		<http:listener doc:name="GET /accounts" doc:id="cd9de5f1-cb0d-433b-bcd1-f8fd31181ce4" config-ref="HTTP_Listener_config" path="/accounts" allowedMethods="GET">
+			<http:response statusCode="#[vars.httpStatus default 200]" />
+			<http:error-response statusCode="#[vars.httpStatus default 500]" >
+				<http:body ><![CDATA[#[payload]]]></http:body>
+			</http:error-response>
+		</http:listener>
+		<choice doc:name="Name given?" doc:id="ae4c3a4d-badc-4462-8487-e75c540eb9e3" >
+			<when expression="#[isEmpty(attributes.queryParams.name)]">
+				<raise-error doc:name="Invalid" doc:id="9f75f850-5930-4977-a914-4d94cd252ebc" type="ACCOUNT:INVALID_REQUEST" description="Query parameter 'name' is required"/>
+			</when>
+		</choice>
+		<salesforce:query doc:name="Find Accounts by Name" doc:id="cd45ed24-c631-47d3-91ab-6e0ed2b0b1fa" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query ><![CDATA[SELECT Id, Name, Phone, BillingCity, Industry
+FROM Account
+WHERE Name = ':name']]></salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[{
+	name: attributes.queryParams.name
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<ee:transform doc:name="Records to JSON" doc:id="0d65b97f-e404-4812-a384-47a4bce34c2b" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+
+	payload map ((account) -> {
+		accountId: account.Id,
+		name: account.Name,
+		phone: account.Phone,
+		city: account.BillingCity,
+		industry: account.Industry
+	})
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler ref="accounts-error-handler" />
+	</flow>
 	<sub-flow name="build-error-response-subflow" doc:id="53cff18b-10ba-48de-a453-fc54ee524103" >
 		<ee:transform doc:name="Error JSON" doc:id="e77753e2-b8c9-40a4-832d-501c193383a5" >
 			<ee:message >
@@ -71,6 +112,7 @@ output application/json
 			</ee:message>
 		</ee:transform>
 	</sub-flow>
+	
 <!-- ============ Error handling ============ -->
 	<error-handler name="accounts-error-handler" doc:id="52fc4d1e-d2d8-4eb7-9f46-6ec914782f0b" >
 		<on-error-propagate enableNotifications="true" logException="false" doc:name="ACCOUNT:INVALID_REQUEST" doc:id="76e00ebf-4360-4c0b-aedf-79721bfcfb8c" type="ACCOUNT:INVALID_REQUEST">
@@ -79,12 +121,12 @@ output application/json
 			<set-variable value="#[error.description]" doc:name="errorMessage" doc:id="706e8d1f-0f22-4126-9357-472b91828210" variableName="errorMessage"/>
 			<flow-ref doc:name="Build Error Response Subflow" doc:id="5e9d7c70-9022-4d2f-b4e0-3df229957440" name="build-error-response-subflow"/>
 		</on-error-propagate>
-		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="37a47451-2754-4ff0-9317-111e9a8a3e00" type="ACCOUNT:CREATE_FAILED, ACCOUNT:UPDATE_FAILED, ACCOUNT:UPSERT_FAILED">
-			<set-variable value="#[422]" doc:name="httpStatus 422" doc:id="e43be541-d9bb-4b39-b191-88d027f18010" variableName="httpStatus" />
+		<!-- [STUDIO:"On Error Propagate"]<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="37a47451-2754-4ff0-9317-111e9a8a3e00" type="ACCOUNT:CREATE_FAILED, ACCOUNT:UPDATE_FAILED, ACCOUNT:UPSERT_FAILED">
+			<set-variable value="#[422&#93;" doc:name="httpStatus 422" doc:id="e43be541-d9bb-4b39-b191-88d027f18010" variableName="httpStatus" />
 			<set-variable value="SALESFORCE_REJECTED" doc:name="errorCode" doc:id="03f6048e-7eef-4fef-a72a-466f910ad384" variableName="errorCode" />
-			<set-variable value="#[error.description]" doc:name="errorMessage" doc:id="14c21c8f-46aa-4168-9313-99dd17ecec41" variableName="errorMessage" />
+			<set-variable value="#[error.description&#93;" doc:name="errorMessage" doc:id="14c21c8f-46aa-4168-9313-99dd17ecec41" variableName="errorMessage" />
 			<flow-ref doc:name="Build Error Response Subflow" doc:id="3085b3cd-3db6-4fd9-b64c-0c296714c14a" name="build-error-response-subflow" />
-		</on-error-propagate>
+		</on-error-propagate> [STUDIO] -->
 		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="0fb55bb3-2410-462d-b090-0cecbe87516e" type="SALESFORCE:CONNECTIVITY">
 			<set-variable value="#[503]" doc:name="httpStatus 503" doc:id="df53c58f-dc83-4ad0-9ecb-749a75c7bf70" variableName="httpStatus" />
 			<set-variable value="SALESFORCE_UNAVAILABLE" doc:name="errorCode" doc:id="0e4fee66-de43-4364-8d16-e1d56343ede9" variableName="errorCode" />
