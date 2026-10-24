@@ -1,0 +1,9 @@
+%dw 2.0
+
+type auto_53cff18b_10ba_48de_a453_fc54ee524103_Output_Payload = {|
+  status: String, 
+  errorCode: Null, 
+  message: Null, 
+  correlationId: String
+|}
+

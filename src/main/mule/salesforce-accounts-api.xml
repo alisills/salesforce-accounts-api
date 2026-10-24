@@ -4,6 +4,7 @@
 	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                        <!-- ============ Error handling ============ -->
 	<sub-flow name="build-error-response-subflow" doc:id="53cff18b-10ba-48de-a453-fc54ee524103" >
 		<ee:transform doc:name="Error JSON" doc:id="e77753e2-b8c9-40a4-832d-501c193383a5" >
 			<ee:message >
@@ -19,4 +20,36 @@ output application/json
 			</ee:message>
 		</ee:transform>
 	</sub-flow>
+	<error-handler name="salesforce-accounts-apiError_Handler" doc:id="52fc4d1e-d2d8-4eb7-9f46-6ec914782f0b" >
+		<on-error-propagate enableNotifications="true" logException="false" doc:name="ACCOUNT:INVALID_REQUEST" doc:id="76e00ebf-4360-4c0b-aedf-79721bfcfb8c" type="ACCOUNT:INVALID_REQUEST">
+			<set-variable value="#[400]" doc:name="httpStatus 400" doc:id="ed015f41-b313-4424-8b1e-038eb82d3bb5" variableName="httpStatus"/>
+			<set-variable value="INVALID_REQUEST" doc:name="erroCode" doc:id="016a318d-9dda-49e2-97ad-371081866614" variableName="errorCode"/>
+			<set-variable value="#[error.description]" doc:name="errorMessage" doc:id="706e8d1f-0f22-4126-9357-472b91828210" variableName="errorMessage"/>
+			<flow-ref doc:name="Build Error Response Subflow" doc:id="5e9d7c70-9022-4d2f-b4e0-3df229957440" name="build-error-response-subflow"/>
+		</on-error-propagate>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="37a47451-2754-4ff0-9317-111e9a8a3e00" type="ACCOUNT:CREATE_FAILED, ACCOUNT:UPDATE_FAILED, ACCOUNT:UPSERT_FAILED">
+			<set-variable value="#[422]" doc:name="httpStatus 422" doc:id="e43be541-d9bb-4b39-b191-88d027f18010" variableName="httpStatus" />
+			<set-variable value="SALESFORCE_REJECTED" doc:name="errorCode" doc:id="03f6048e-7eef-4fef-a72a-466f910ad384" variableName="errorCode" />
+			<set-variable value="#[error.description]" doc:name="errorMessage" doc:id="14c21c8f-46aa-4168-9313-99dd17ecec41" variableName="errorMessage" />
+			<flow-ref doc:name="Build Error Response Subflow" doc:id="3085b3cd-3db6-4fd9-b64c-0c296714c14a" name="build-error-response-subflow" />
+		</on-error-propagate>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="0fb55bb3-2410-462d-b090-0cecbe87516e" type="SALESFORCE:CONNECTIVITY">
+			<set-variable value="#[503]" doc:name="httpStatus 503" doc:id="df53c58f-dc83-4ad0-9ecb-749a75c7bf70" variableName="httpStatus" />
+			<set-variable value="SALESFORCE_UNAVAILABLE" doc:name="errorCode" doc:id="0e4fee66-de43-4364-8d16-e1d56343ede9" variableName="errorCode" />
+			<set-variable value='"Salesforce is temporarily unavailable"' doc:name="errorMessage" doc:id="1cc0dbf5-8d8b-4a01-a9f0-25582d1ff062" variableName="errorMessage" />
+			<flow-ref doc:name="Build Error Response Subflow" doc:id="5210d7f7-8cc0-4a92-be7f-8083d85033bc" name="build-error-response-subflow" />
+		</on-error-propagate>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="dc99ab72-e5c6-48e2-9e51-f2d13d3fa49d" when="#[error.errorType.namespace == 'SALESFORCE']">
+			<set-variable value="#[502]" doc:name="httpStatus 502" doc:id="6373ce2e-847c-4ab8-b4a4-908e4525821f" variableName="httpStatus" />
+			<set-variable value="SALESFORCE_ERROR" doc:name="errorCode" doc:id="bcf43c75-11b9-4c86-86dd-95227a40af44" variableName="errorCode" />
+			<set-variable value='"Salesforce returned an error"' doc:name="errorMessage" doc:id="d34c3f6a-b3d6-4d11-b467-855e2de6ff5a" variableName="errorMessage" />
+			<flow-ref doc:name="Build Error Response Subflow" doc:id="f5f8fe24-b1c7-4390-8e76-83e58e41954f" name="build-error-response-subflow" />
+		</on-error-propagate>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="5776df8a-973d-45de-9b3b-bd996a8437da" type="ANY">
+			<set-variable value="#[500]" doc:name="httpStatus 500" doc:id="0f35d6e0-425f-4a50-b813-b703667840a6" variableName="httpStatus" />
+			<set-variable value="INTERNAL_ERROR" doc:name="errorCode" doc:id="b0bf7d01-1c3c-4ce7-95c8-2c9ad5481149" variableName="errorCode" />
+			<set-variable value='"An unexpected error occurred"' doc:name="errorMessage" doc:id="42638b3e-6e43-4481-b880-4ce7ed011cfb" variableName="errorMessage" />
+			<flow-ref doc:name="Build Error Response Subflow" doc:id="b1e7a001-181b-4a1e-9468-181a4a350b00" name="build-error-response-subflow" />
+		</on-error-propagate>
+	</error-handler>
 </mule>
