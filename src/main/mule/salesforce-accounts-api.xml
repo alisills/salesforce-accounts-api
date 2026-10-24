@@ -57,7 +57,7 @@ output application/json
 		</ee:transform>
 		<error-handler ref="accounts-error-handler" />
 	</flow>
-	
+
 <!-- ============ GET /api/accounts?name= : query ============ -->
 	<flow name="find-accounts-flow" doc:id="d61c9b02-9df3-4d8b-b864-d29f2e4977d1" >
 		<http:listener doc:name="GET /accounts" doc:id="cd9de5f1-cb0d-433b-bcd1-f8fd31181ce4" config-ref="HTTP_Listener_config" path="/accounts" allowedMethods="GET">
@@ -97,6 +97,94 @@ output application/json
 		</ee:transform>
 		<error-handler ref="accounts-error-handler" />
 	</flow>
+
+<!-- =========== PATCH /api/accounts/{accountId} ============ -->	
+	<flow name="update-account-flow" doc:id="aa2b0fce-9103-4edb-8457-4d1ce8c6986b" >
+		<http:listener doc:name="PATCH /accounts/{accountId}" doc:id="3b4fee32-f186-4647-94b9-fe4d38149506" config-ref="HTTP_Listener_config" path="/accounts/{accountId}" allowedMethods="PATCH">
+			<http:response statusCode="#[vars.httpStatus default 200]" />
+			<http:error-response statusCode="#[vars.httpStatus default 500]" >
+				<http:body ><![CDATA[#[payload]]]></http:body>
+			</http:error-response>
+		</http:listener>
+		<set-variable value="#[attributes.uriParams.accountId]" doc:name="Save Account ID" doc:id="c3d15a88-cf12-400d-8e32-e0a11b4c4eab" variableName="accountId"/>
+		<ee:transform doc:name="Request to Account Update" doc:id="14cbdbc5-fa8e-4bb6-8c0e-930faa1d6172" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+	Id: vars.accountId,
+	Phone: payload.phone,
+	BillingCity: payload.city
+} filterObject ((value) -> value != null)]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:update type="Account" doc:name="Update Account" doc:id="7b95cac4-574c-4ee3-9df0-c727ea1dd96e" config-ref="Salesforce_Config"/>
+		<choice doc:name="Updated?" doc:id="f1e4442e-bd13-4ed1-b1b0-5a4fb40a8cdd" >
+			<when expression="#[not payload.successful]">
+				<raise-error doc:name="Update Failed" doc:id="bf3b807e-1207-4f84-973f-fa72d2b706e7" type="ACCOUNT:UPDATE_FAILED" description="#[payload.items[0].message default 'Salesforce rejected the update']"/>
+			</when>
+		</choice>
+		<ee:transform doc:name="Build Response" doc:id="f16a07da-7d16-4b05-ad43-02fa5a9e3e1b" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	accountId: vars.accountId,
+	status: "UPDATED"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler ref="accounts-error-handler" />
+	</flow>
+	
+<!-- ============ PUT /api/accounts/by-customer/{customerId} : upsert ============ -->
+	<flow name="upsert-account-flow" doc:id="c46a5c35-122b-4906-b0d2-85688721c6ef" >
+		<http:listener doc:name="PUT /accounts/by-customer/{customerId}" doc:id="40d508ae-b715-40bd-86a2-26c13de858f5" config-ref="HTTP_Listener_config" path="/accounts/by-customer/{customerId}">
+			<http:response statusCode="#[vars.httpStatus default 200]" />
+			<http:error-response statusCode="#[vars.httpStatus default 500]" >
+				<http:body ><![CDATA[#[payload]]]></http:body>
+			</http:error-response>
+		</http:listener>
+		<set-variable value="#[attributes.uriParams.customerId]" doc:name="Save Customer ID" doc:id="8d0fa06e-ecf7-43d1-875c-da0845f966a2" variableName="customerId"/>
+		<choice doc:name="Valid?" doc:id="5290039a-38c5-45f5-b9eb-821b630ecd85" >
+			<when expression="#[isEmpty(payload.companyName)]">
+				<raise-error doc:name="Invalid" doc:id="205e7cc1-cd03-458b-af30-501b1245b5c5" type="ACCOUNT:INVALID_REQUEST" description="companyName is required"/>
+			</when>
+		</choice>
+		<ee:transform doc:name="Request to Account" doc:id="c123fa3b-3916-44f9-9892-e17d72d91515" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+	Customer_Id__c: vars.customerId,
+	Name: payload.companyName,
+	Phone: payload.phone,
+	BillingCity: payload.city
+} filterObject ((value) -> value != null)]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:upsert objectType="Account" externalIdFieldName="Customer_Id__c" doc:name="Upsert Account" doc:id="d6c28497-d9cd-4d05-888f-38a0ee6d6b0a" config-ref="Salesforce_Config"/>
+		<choice doc:name="Saved?" doc:id="33806f35-b269-44ff-bf77-a8de4daaab3e" >
+			<when expression="#[not payload.successful]">
+				<raise-error doc:name="Upsert Failed" doc:id="feed618c-2bda-4ea0-88ff-b5533cefab34" type="ACCOUNT:UPSERT_FAILED" description="#[payload.items[0].message default 'Salesforce rejected the Account']"/>
+			</when>
+		</choice>
+		<ee:transform doc:name="Build Response" doc:id="4e06020f-d655-400b-b199-b610d08503ed" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	accountId: payload.items[0].id,
+	customerId: vars.customerId,
+	status: "SAVED"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
 	<sub-flow name="build-error-response-subflow" doc:id="53cff18b-10ba-48de-a453-fc54ee524103" >
 		<ee:transform doc:name="Error JSON" doc:id="e77753e2-b8c9-40a4-832d-501c193383a5" >
 			<ee:message >
@@ -121,12 +209,12 @@ output application/json
 			<set-variable value="#[error.description]" doc:name="errorMessage" doc:id="706e8d1f-0f22-4126-9357-472b91828210" variableName="errorMessage"/>
 			<flow-ref doc:name="Build Error Response Subflow" doc:id="5e9d7c70-9022-4d2f-b4e0-3df229957440" name="build-error-response-subflow"/>
 		</on-error-propagate>
-		<!-- [STUDIO:"On Error Propagate"]<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="37a47451-2754-4ff0-9317-111e9a8a3e00" type="ACCOUNT:CREATE_FAILED, ACCOUNT:UPDATE_FAILED, ACCOUNT:UPSERT_FAILED">
-			<set-variable value="#[422&#93;" doc:name="httpStatus 422" doc:id="e43be541-d9bb-4b39-b191-88d027f18010" variableName="httpStatus" />
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="37a47451-2754-4ff0-9317-111e9a8a3e00" type="ACCOUNT:CREATE_FAILED, ACCOUNT:UPDATE_FAILED, ACCOUNT:UPSERT_FAILED">
+			<set-variable value="#[422]" doc:name="httpStatus 422" doc:id="e43be541-d9bb-4b39-b191-88d027f18010" variableName="httpStatus" />
 			<set-variable value="SALESFORCE_REJECTED" doc:name="errorCode" doc:id="03f6048e-7eef-4fef-a72a-466f910ad384" variableName="errorCode" />
-			<set-variable value="#[error.description&#93;" doc:name="errorMessage" doc:id="14c21c8f-46aa-4168-9313-99dd17ecec41" variableName="errorMessage" />
+			<set-variable value="#[error.description]" doc:name="errorMessage" doc:id="14c21c8f-46aa-4168-9313-99dd17ecec41" variableName="errorMessage" />
 			<flow-ref doc:name="Build Error Response Subflow" doc:id="3085b3cd-3db6-4fd9-b64c-0c296714c14a" name="build-error-response-subflow" />
-		</on-error-propagate> [STUDIO] -->
+		</on-error-propagate>
 		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="0fb55bb3-2410-462d-b090-0cecbe87516e" type="SALESFORCE:CONNECTIVITY">
 			<set-variable value="#[503]" doc:name="httpStatus 503" doc:id="df53c58f-dc83-4ad0-9ecb-749a75c7bf70" variableName="httpStatus" />
 			<set-variable value="SALESFORCE_UNAVAILABLE" doc:name="errorCode" doc:id="0e4fee66-de43-4364-8d16-e1d56343ede9" variableName="errorCode" />
