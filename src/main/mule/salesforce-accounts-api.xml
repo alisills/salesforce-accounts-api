@@ -1,10 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- File: src/main/mule/salesfore-accounts-api.xml -->
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
-	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
-                        <!-- ============ Error handling ============ -->
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+<!-- ============ POST /api/accounts : create ============ -->                      
+	<flow name="create-account-flow" doc:id="25295d41-1a1d-4486-ae9b-8a54204404ae" >
+		<http:listener doc:name="POST /accounts" doc:id="a4fcf680-d82a-4ac5-8bf7-6766e71edc5c" config-ref="HTTP_Listener_config" path="/accounts" allowedMethods="POST">
+			<http:response statusCode="#[vars.httpStatus default 200]" />
+			<http:error-response statusCode="#[vars.httpStatus default 500]" >
+				<http:body ><![CDATA[#[payload]]]></http:body>
+			</http:error-response>
+		</http:listener>
+		<set-variable value="#[payload]" doc:name="Save Request" doc:id="e3e37a3b-906d-49bc-ab31-61d3d490f641" variableName="requestBody"/>
+		<choice doc:name="Valid?" doc:id="a4d2dc5f-fbd6-4dcc-9c97-0019e2df2b1a" >
+			<when expression="#[isEmpty(payload.companyName)]">
+				<raise-error doc:name="Invalid" doc:id="75556c80-9bf9-4252-8408-1fd6a70c1de2" type="ACCOUNT:INVALID_REQUEST" description="companyName is required"/>
+			</when>
+		</choice>
+		<ee:transform doc:name="Request to Account" doc:id="bc266eb8-8308-4b44-ad37-330d66d8d3b7" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	Name: payload.companyName,
+	Phone: payload.phone,
+	Website: payload.website,
+	BillingCity: payload.city,
+	Industry: payload.industry,
+	Customer_Id__c: payload.customerId
+} filterObject ((value) -> value != null)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:create type="Account" doc:name="Create Account" doc:id="536852c6-e853-4781-b704-f6631d7d8b33" config-ref="Salesforce_Config"/>
+		<choice doc:name="Created?" doc:id="005bf3f4-b96b-4bf9-97f4-72c243f2c472" >
+			<when expression="#[not payload.successful]">
+				<raise-error doc:name="Create failed" doc:id="d11d2819-3cc1-4003-b159-eb2ee1eadfa2" type="ACCOUNT:CREATE_FAILED" description="#[payload.item[0].message default 'Salesforce rejected the Account']"/>
+			</when>
+		</choice>
+		<set-variable value="#[201]" doc:name="Status 201" doc:id="a82455a9-3dd8-4877-99f3-218e6f4c78ad" variableName="httpStatus"/>
+		<ee:transform doc:name="Build Response" doc:id="65b089ca-7c44-4b45-8355-297a4aecef16" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	accountId: payload.items[0].id,
+	name: vars.requestBody.companyName,
+	status: "CREATED"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler ref="accounts-error-handler" />
+	</flow>
 	<sub-flow name="build-error-response-subflow" doc:id="53cff18b-10ba-48de-a453-fc54ee524103" >
 		<ee:transform doc:name="Error JSON" doc:id="e77753e2-b8c9-40a4-832d-501c193383a5" >
 			<ee:message >
@@ -20,7 +71,8 @@ output application/json
 			</ee:message>
 		</ee:transform>
 	</sub-flow>
-	<error-handler name="salesforce-accounts-apiError_Handler" doc:id="52fc4d1e-d2d8-4eb7-9f46-6ec914782f0b" >
+<!-- ============ Error handling ============ -->
+	<error-handler name="accounts-error-handler" doc:id="52fc4d1e-d2d8-4eb7-9f46-6ec914782f0b" >
 		<on-error-propagate enableNotifications="true" logException="false" doc:name="ACCOUNT:INVALID_REQUEST" doc:id="76e00ebf-4360-4c0b-aedf-79721bfcfb8c" type="ACCOUNT:INVALID_REQUEST">
 			<set-variable value="#[400]" doc:name="httpStatus 400" doc:id="ed015f41-b313-4424-8b1e-038eb82d3bb5" variableName="httpStatus"/>
 			<set-variable value="INVALID_REQUEST" doc:name="erroCode" doc:id="016a318d-9dda-49e2-97ad-371081866614" variableName="errorCode"/>
