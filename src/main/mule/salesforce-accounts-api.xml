@@ -141,7 +141,7 @@ output application/json
 	
 <!-- ============ PUT /api/accounts/by-customer/{customerId} : upsert ============ -->
 	<flow name="upsert-account-flow" doc:id="c46a5c35-122b-4906-b0d2-85688721c6ef" >
-		<http:listener doc:name="PUT /accounts/by-customer/{customerId}" doc:id="40d508ae-b715-40bd-86a2-26c13de858f5" config-ref="HTTP_Listener_config" path="/accounts/by-customer/{customerId}">
+		<http:listener doc:name="PUT /accounts/by-customer/{customerId}" doc:id="40d508ae-b715-40bd-86a2-26c13de858f5" config-ref="HTTP_Listener_config" path="/accounts/by-customer/{customerId}" allowedMethods="PUT">
 			<http:response statusCode="#[vars.httpStatus default 200]" />
 			<http:error-response statusCode="#[vars.httpStatus default 500]" >
 				<http:body ><![CDATA[#[payload]]]></http:body>
